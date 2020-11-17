@@ -10,7 +10,7 @@ prop_test() ->
             begin
               Command = ["cmd", "run"],
               cli_console_command:register(Command, ArgsDef, fun(A) -> A end, Description),
-              case cli_console_command:run({ok, Command, Args}) of
+              case cli_console_command:run(Command, Args) of
                 {ok, _ArgsResult} ->
                   %@TODO: better evaluation
                   true;

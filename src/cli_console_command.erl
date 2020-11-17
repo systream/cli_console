@@ -11,7 +11,7 @@
 
 -include("cli_console_command.hrl").
 
--export([start_link/0, register/4, run/1]).
+-export([start_link/0, register/4, run/2, get_help/1]).
 -export([init/1, handle_call/3, handle_cast/2]).
 
 -define(SERVER, ?MODULE).
@@ -29,13 +29,18 @@
 register(Command, Arguments, Fun, Description) ->
   gen_server:call(?SERVER, {register, Command, Arguments, Fun, Description}).
 
--spec run({ok, [string()], proplists:proplist()}) ->
+-spec run([string()], proplists:proplist()) ->
   {ok, term()} |
   {error, command_not_found} |
   {error, {not_convertible, {argument_type(), term()}}} |
   {error, {missing_arguments, list(term())}}.
-run({ok, Command, Arguments}) ->
+run(Command, Arguments) ->
   gen_server:call(?SERVER, {run, Command, Arguments}, timer:seconds(60)).
+
+-spec get_help([string()]) ->
+  {ok, term()}.
+get_help(Command) ->
+  gen_server:call(?SERVER, {get_help, Command}).
 
 %%%===================================================================
 %%% Spawning and gen_server implementation
@@ -56,9 +61,13 @@ handle_call({run, Command, Args}, From, State = #state{}) ->
     [] ->
       {reply, {error, command_not_found}, State};
     [{_, ArgsDef, Fun, _Description}] ->
-      run_command(ArgsDef, Args, From, Fun),
+      run_command(Command, Args, ArgsDef, From, Fun),
       {noreply, State}
   end;
+handle_call({get_help, Command}, _From, State = #state{}) ->
+  Help = do_get_help(Command),
+  Output = [format_command(HelpCommand) || HelpCommand <- sort_by_commands(Help)],
+  {reply, {ok, [cli_console_formatter:title("Help~n") | Output]}, State};
 handle_call({register, Command, ArgsDef, Fun, Description}, _From,
             State = #state{}) ->
   true = ets:insert(?ETS_TABLE_NAME, {Command, ArgsDef, Fun, Description}),
@@ -73,7 +82,7 @@ handle_cast(_Request, State = #state{}) ->
 %%% Internal functions
 %%%===================================================================
 
-run_command(ArgsDef, Args, From, Fun) ->
+run_command(Command, Args, ArgsDef, From, Fun) ->
   spawn(fun() ->
           MissingArguments = get_missing_arguments(ArgsDef, Args),
           Result =
@@ -82,7 +91,14 @@ run_command(ArgsDef, Args, From, Fun) ->
                                     WithDefault = add_default_value(ArgsDef, Args),
                                     case convert(ArgsDef, WithDefault) of
                                       {ok, NewArgs} ->
-                                        {ok, Fun(NewArgs)};
+                                        case is_not_in_arg_def_but_set(ArgsDef,
+                                                                       Args,
+                                                                       "help") of
+                                          true ->
+                                            get_help(Command);
+                                          _ ->
+                                            {ok, Fun(NewArgs)}
+                                        end;
                                       Else ->
                                         Else
                                     end
@@ -163,3 +179,31 @@ convert_arg(Type, Value) ->
 -spec is_numeric(string()) -> boolean().
 is_numeric(Value) ->
   [Char || Char <- Value, Char >= $0, Char =< $9] =:= Value.
+
+do_get_help(Commands) ->
+  Match = {'$1', '_', '_', '$2'},
+  Result = ['$1', '$2'],
+  CommandLength = length(Commands),
+  Filter = [{'=<',{length, '$1'}, CommandLength}],
+  ets:select(cli_commands, [{Match, Filter, [Result]}]).
+
+sort_by_commands(Data) ->
+  lists:usort(fun([CommandsA, _], [CommandsB, _]) ->
+                CommandsA =< CommandsB
+              end, Data).
+
+format_command([Commands, Desc]) ->
+  CommandStr = string:pad(string:join(Commands, " "), 27),
+  cli_console_formatter:text("~s \t ~s", [CommandStr, Desc]).
+
+is_not_in_arg_def_but_set(ArgDef, Args, Flag) ->
+  proplists:is_defined(Flag, Args) andalso
+  not is_argument_defined(Flag, ArgDef).
+
+is_argument_defined(Arg, ArgsDef) ->
+  case lists:keyfind(Arg, 2, ArgsDef) of
+    false ->
+      false;
+    _ ->
+      true
+  end.

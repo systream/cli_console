@@ -109,7 +109,8 @@ all() ->
     simple_text,
     missing_parameter,
     bad_parameter,
-    parameter
+    parameter,
+    automatic_help_argument
   ].
 
 %%--------------------------------------------------------------------
@@ -148,7 +149,7 @@ simple_command(_Config) ->
     end,
     "show available commands"),
 
-  ?assertEqual("Command not found\n",
+  ?assertEqual("Command not found\n\e[37;1mHelp\n\n\e[0mshow commands               \t show available commands\nshow tables                 \t show database tables\n",
                catch_output(fun() -> cli_console:run("unknown command") end)),
   ?assertEqual("Commands\n * show tables: list tales\n * help: print help\n",
                catch_output(fun() -> cli_console:run("show commands") end)),
@@ -208,7 +209,7 @@ missing_parameter(_Config) ->
                             "Delete Table"),
 
 
-  ?assertEqual("Missing argument: \n * \"table\"\n * \"Row\": \"Desc for row\"\n",
+  ?assertEqual("Missing argument: \n * \"table\"\n * \"Row\": \"Desc for row\"\n\e[37;1mHelp\n\n\e[0mdelete                      \t Delete Table\nhelp                        \t print help\n",
                catch_output(fun() -> cli_console:run("delete") end)).
 
 bad_parameter(_Config) ->
@@ -220,7 +221,7 @@ bad_parameter(_Config) ->
                             "set limit for something"),
 
 
-  ?assertEqual("Illegal parameter: integer \"abc\"\n",
+  ?assertEqual("Illegal parameter: integer \"abc\"\n\e[37;1mHelp\n\n\e[0mdelete                      \t Delete Table\ndescribe table              \t list all fields in table\nhelp                        \t print help\nset limit                   \t set limit for something\nshow commands               \t show available commands\nshow tables                 \t show database tables\n",
                catch_output(fun() ->
                               cli_console:run("set limit --threshold=abc")
                             end)).
@@ -243,6 +244,17 @@ parameter(_Config) ->
                 end),
   ?assertEqual("\e[37;1mList of partions\n\e[0m---------------------------------------------------------------\nNode: test\nLimit: 123\n ------------------------------- \n | \e[37m    node    \e[0m | \e[37m partition  \e[0m |\n ------------------------------- \n |  node@test   |      a       |\n |  node@test   |      b       |\n |  node@test   |      c       |\n |  node@test   |      d       |\n ------------------------------- \n",
                Output).
+
+automatic_help_argument(_Config) ->
+  Help = cli_console_command_arg:argument("help", flag, "print help"),
+  TestFun = fun(_) -> [{text, "ok"}] end,
+  cli_console:register(["test"], [], TestFun, "List all partitions"),
+  Output = catch_output(fun() -> cli_console:run("test --help") end),
+  ?assertEqual("\e[37;1mHelp\n\n\e[0mdelete                      \t Delete Table\nhelp                        \t print help\ntest                        \t List all partitions\n",
+               Output),
+  cli_console:register(["test"], [Help], TestFun, "List all partitions"),
+  Output2 = catch_output(fun() -> cli_console:run("test --help") end),
+  ?assertEqual("ok", Output2).
 
 list_partitions(Args) ->
   [cli_console_formatter:title("List of partions"),

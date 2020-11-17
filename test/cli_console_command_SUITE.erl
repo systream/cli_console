@@ -127,16 +127,16 @@ all() ->
 %%--------------------------------------------------------------------
 register_no_argument(_Config) ->
   ok = cli_console_command:register(["test"], [], ?DUMMY_FUN, ""),
-  ?assertEqual({ok, ok}, cli_console_command:run({ok, ["test"], []})).
+  ?assertEqual({ok, ok}, cli_console_command:run(["test"], [])).
 
 register_the_twice(_Config) ->
   ok = cli_console_command:register(["foo"], [], ?DUMMY_FUN, ""),
   ok = cli_console_command:register(["foo"], [], ?DUMMY_FUN(ok2), ""),
-  ?assertEqual({ok, ok2}, cli_console_command:run({ok, ["foo"], []})).
+  ?assertEqual({ok, ok2}, cli_console_command:run(["foo"], [])).
 
 command_not_found(_Config) ->
   ?assertEqual({error, command_not_found},
-               cli_console_command:run({ok, ["not_found_command"], []})).
+               cli_console_command:run(["not_found_command"], [])).
 
 mandatory_arg_not_set_found(_Config) ->
   Foo = cli_console_command_arg:argument("foo", string),
@@ -145,7 +145,7 @@ mandatory_arg_not_set_found(_Config) ->
   cli_console_command:register(["test1"], [FooRequired], ?DUMMY_FUN, ""),
 
   ?assertEqual({error, {missing_arguments, [FooRequired]}},
-               cli_console_command:run({ok, ["test1"], []})).
+               cli_console_command:run(["test1"], [])).
 
 mandatory_arg_not_set_but_has_default(_Config) ->
   Foo = cli_console_command_arg:argument("foo", string),
@@ -154,7 +154,7 @@ mandatory_arg_not_set_but_has_default(_Config) ->
 
   cli_console_command:register(["test1"], [FooRequired], ?DUMMY_FUN, ""),
 
-  ?assertEqual({ok, ok}, cli_console_command:run({ok, ["test1"], []})).
+  ?assertEqual({ok, ok}, cli_console_command:run(["test1"], [])).
 
 get_default_if_arg_not_specified(_Config) ->
   Foo = cli_console_command_arg:argument("foo", string),
@@ -164,7 +164,7 @@ get_default_if_arg_not_specified(_Config) ->
   cli_console_command:register(["test1"], [FooRequired], fun(A) -> A end, ""),
 
   ?assertEqual({ok, [{"foo", "test"}]},
-               cli_console_command:run({ok, ["test1"], []})).
+               cli_console_command:run(["test1"], [])).
 
 run_with_mixed_args(_Config) ->
   Simple = cli_console_command_arg:argument("simple", string),
@@ -180,11 +180,11 @@ run_with_mixed_args(_Config) ->
 
   ?assertEqual({ok, [{"mandatory", 12},
                      {"simple", "test_nd"}]},
-               cli_console_command:run({ok, ["command"], [{"simple", "test_nd"},
-                                                          {"mandatory", "12"}]})),
+               cli_console_command:run(["command"], [{"simple", "test_nd"},
+                                                          {"mandatory", "12"}])),
   ?assertEqual({ok, [{"mandatory", 1},
                      {"simple", "test"}]},
-               cli_console_command:run({ok, ["command"], [{"mandatory", "1"}]})).
+               cli_console_command:run( ["command"], [{"mandatory", "1"}])).
 
 handle_cast_for_cover(_Config) ->
   gen_server:cast(cli_console_command, test).
@@ -200,7 +200,7 @@ arg_convert_happy(_Config) ->
 test_arg_convert(Type, Test, Result) ->
   Arg = cli_console_command_arg:argument("test_arg", Type),
   cli_console_command:register(["type_check"], [Arg], fun(A) -> A end, ""),
-  Input = {ok, ["type_check"], [{"test_arg", Test}]},
-  ?assertEqual({ok, [{"test_arg", Result}]}, cli_console_command:run(Input)).
+  ?assertEqual({ok, [{"test_arg", Result}]},
+               cli_console_command:run(["type_check"], [{"test_arg", Test}])).
 
 
