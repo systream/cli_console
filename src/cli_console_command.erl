@@ -11,7 +11,7 @@
 
 -include("cli_console_command.hrl").
 
--export([start_link/0, register/4, run/2, get_help/1]).
+-export([start_link/0, register/4, run/2, get_help/1, handle_info/2]).
 -export([init/1, handle_call/3, handle_cast/2]).
 
 -define(SERVER, ?MODULE).
@@ -78,6 +78,10 @@ handle_call({register, Command, ArgsDef, Fun, Description}, _From,
 handle_cast(_Request, State = #state{}) ->
   {noreply, State}.
 
+-spec handle_info(Info :: term(), State :: term()) ->
+  {noreply, NewState :: term()}.
+handle_info({'EXIT', _Pid, _}, State) ->
+  {noreply, State}.
 
 %%%===================================================================
 %%% Internal functions
