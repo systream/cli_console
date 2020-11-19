@@ -110,7 +110,8 @@ all() ->
     missing_parameter,
     bad_parameter,
     parameter,
-    automatic_help_argument
+    automatic_help_argument,
+    handle_errors
   ].
 
 %%--------------------------------------------------------------------
@@ -255,6 +256,12 @@ automatic_help_argument(_Config) ->
   cli_console:register(["test"], [Help], TestFun, "List all partitions"),
   Output2 = catch_output(fun() -> cli_console:run("test --help") end),
   ?assertEqual("ok", Output2).
+
+handle_errors(_Config) ->
+  TestFun = fun(_) -> throw("ooups"), [{text, "ok"}] end,
+  cli_console:register(["test"], [], TestFun, "List all partitions"),
+  Output = catch_output(fun() -> cli_console:run("test") end),
+  ?assertEqual("\e[31;1mError occured\n\e[0m\e[31;1m\"ooups\"\n\e[0m", Output).
 
 list_partitions(Args) ->
   [cli_console_formatter:title("List of partions"),

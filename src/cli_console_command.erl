@@ -51,6 +51,7 @@ start_link() ->
 
 -spec init(term()) -> {ok, state()}.
 init(_) ->
+  process_flag(trap_exit, true),
   ets:new(cli_commands, [set, protected, named_table]),
   {ok, #state{}}.
 
@@ -83,32 +84,38 @@ handle_cast(_Request, State = #state{}) ->
 %%%===================================================================
 
 run_command(Command, Args, ArgsDef, From, Fun) ->
-  spawn(fun() ->
+  spawn_link(fun() ->
           MissingArguments = get_missing_arguments(ArgsDef, Args),
-          Result =
-            evalute_argument_check(MissingArguments,
-                                  fun() ->
-                                    WithDefault = add_default_value(ArgsDef, Args),
-                                    case convert(ArgsDef, WithDefault) of
-                                      {ok, NewArgs} ->
-                                        case is_not_in_arg_def_but_set(ArgsDef,
-                                                                       Args,
-                                                                       "help") of
-                                          true ->
-                                            get_help(Command);
-                                          _ ->
-                                            {ok, Fun(NewArgs)}
-                                        end;
-                                      Else ->
-                                        Else
-                                    end
-                                  end),
+          SuccessFun = fun() ->
+            case convert(ArgsDef, Args) of
+              {ok, NewArgs} ->
+                case is_not_in_arg_def_but_set(ArgsDef, Args, "help") of
+                  true ->
+                    get_help(Command);
+                  _ ->
+                    execute_fun(Fun, NewArgs)
+                end;
+              Else ->
+                Else
+            end
+          end,
+          Result = evaluate_argument_check(MissingArguments, SuccessFun),
           gen_server:reply(From, Result)
         end).
 
-evalute_argument_check([], Fun) ->
+execute_fun(Fun, NewArgs) ->
+  try
+    {ok, Fun(NewArgs)}
+  catch _Type:Error:_St ->
+    {ok, [
+      cli_console_formatter:error("Error occured"),
+      cli_console_formatter:error(io_lib:format("~p", [Error]))
+    ]}
+  end.
+
+evaluate_argument_check([], Fun) ->
   Fun();
-evalute_argument_check(MissingArguments, _Fun) ->
+evaluate_argument_check(MissingArguments, _Fun) ->
   {error, {missing_arguments, MissingArguments}}.
 
 add_default_value(ArgsDef, Args) ->
@@ -141,7 +148,8 @@ has_default_value(#argument{default = _}) ->
   true.
 
 convert(ArgsDef, Args) ->
-  convert(ArgsDef, Args, []).
+  WithDefault = add_default_value(ArgsDef, Args),
+  convert(ArgsDef, WithDefault, []).
 
 convert([], _Args, Acc) ->
   {ok, Acc};

@@ -30,8 +30,8 @@ start_link() ->
 %%                  modules => modules()}   % optional
 init([]) ->
     SupFlags = #{strategy => one_for_all,
-                 intensity => 100,
-                 period => 100},
+                 intensity => 1,
+                 period => 10},
     ChildSpecs = [
                   #{id => cli_command_server,
                     start => {cli_console_command, start_link, []},
