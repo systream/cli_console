@@ -18,7 +18,7 @@
 
 -type output_format() :: {text, string()} | {format, module(), term()}.
 
--type command_fun() :: fun(() -> [output_format()] | output_format() ).
+-type command_fun() :: fun((proplists:proplist()) -> [output_format()] | output_format() ).
 
 -type command() :: string().
 

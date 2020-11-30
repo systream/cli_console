@@ -78,6 +78,7 @@ init_per_testcase(_TestCase, Config) ->
 %% Reason = term()
 %%--------------------------------------------------------------------
 end_per_testcase(_TestCase, _Config) ->
+  meck:unload(),
   ok.
 
 %%--------------------------------------------------------------------
@@ -111,7 +112,14 @@ all() ->
     bad_parameter,
     parameter,
     automatic_help_argument,
-    handle_errors
+    automatic_help_command,
+    help_for_exact_command,
+    help_subcommands,
+    empty_command_for_full_help,
+    handle_errors,
+    crash_in_function,
+    default_value_flag,
+    pid_not_in_state
   ].
 
 %%--------------------------------------------------------------------
@@ -124,7 +132,7 @@ all() ->
 %%--------------------------------------------------------------------
 simple_command(_Config) ->
 
-  All = cli_console_command_arg:argument("all", flag),
+  All = cli_console_command_arg:argument("all", flag, "all desc"),
   ok = cli_console:register(["show", "tables"], [All],
     fun(Args) ->
       Init =
@@ -150,7 +158,7 @@ simple_command(_Config) ->
     end,
     "show available commands"),
 
-  ?assertEqual("Command not found\n\e[37;1mHelp\n\n\e[0mshow commands               \t show available commands\nshow tables                 \t show database tables\n",
+  ?assertEqual("Command not found\n\n\e[37;1mHelp\n\n\e[0mhelp                             Print help\nshow commands                    show available commands\nshow tables                      show database tables\n",
                catch_output(fun() -> cli_console:run("unknown command") end)),
   ?assertEqual("Commands\n * show tables: list tales\n * help: print help\n",
                catch_output(fun() -> cli_console:run("show commands") end)),
@@ -189,17 +197,17 @@ table(_Config) ->
                Output).
 
 simple_text(_Config) ->
-  ok = cli_console:register(["help"], [],
+  ok = cli_console:register(["test", "help"], [],
                             fun(_Args) ->
                               {text, "This is the help"}
                             end, "print help"),
 
 
   ?assertEqual("This is the help",
-               catch_output(fun() -> cli_console:run(" help") end)).
+               catch_output(fun() -> cli_console:run("  test  help") end)).
 
 missing_parameter(_Config) ->
-  Table = cli_console_command_arg:argument("table", string),
+  Table = cli_console_command_arg:argument("table", string, "table desc"),
   Row = cli_console_command_arg:argument("Row", string, "Desc for row"),
   ok = cli_console:register(["delete"],
                             [cli_console_command_arg:mandatory(Table),
@@ -210,11 +218,12 @@ missing_parameter(_Config) ->
                             "Delete Table"),
 
 
-  ?assertEqual("Missing argument: \n * \"table\"\n * \"Row\": \"Desc for row\"\n\e[37;1mHelp\n\n\e[0mdelete                      \t Delete Table\nhelp                        \t print help\n",
+  ?assertEqual("Missing argument: \n * table               \t table desc\n * Row                 \t Desc for row\n\n",
                catch_output(fun() -> cli_console:run("delete") end)).
 
 bad_parameter(_Config) ->
-  Threshold = cli_console_command_arg:argument("threshold", integer),
+  Threshold = cli_console_command_arg:argument("threshold", integer,
+                                               "threshold desc"),
   ok = cli_console:register(["set", "limit"], [Threshold],
                             fun(_Args) ->
                               [{text, "success"}]
@@ -222,7 +231,7 @@ bad_parameter(_Config) ->
                             "set limit for something"),
 
 
-  ?assertEqual("Illegal parameter: integer \"abc\"\n\e[37;1mHelp\n\n\e[0mdelete                      \t Delete Table\ndescribe table              \t list all fields in table\nhelp                        \t print help\nset limit                   \t set limit for something\nshow commands               \t show available commands\nshow tables                 \t show database tables\n",
+  ?assertEqual("Illegal parameter: threshold (integer) - \"abc\"\n\n",
                catch_output(fun() ->
                               cli_console:run("set limit --threshold=abc")
                             end)).
@@ -251,17 +260,113 @@ automatic_help_argument(_Config) ->
   TestFun = fun(_) -> [{text, "ok"}] end,
   cli_console:register(["test"], [], TestFun, "List all partitions"),
   Output = catch_output(fun() -> cli_console:run("test --help") end),
-  ?assertEqual("\e[37;1mHelp\n\n\e[0mdelete                      \t Delete Table\nhelp                        \t print help\ntest                        \t List all partitions\n",
+  ?assertEqual("\e[37;1mHelp\n\n\e[0mtest                             List all partitions\n",
                Output),
+
+  TestArg = cli_console_command_arg:argument("foo", flag, "foo flag"),
+  cli_console:register(["test"], [TestArg], TestFun, "List all partitions"),
+  OutputFlag = catch_output(fun() -> cli_console:run("test --help") end),
+  ?assertEqual("\e[37;1mHelp\n\n\e[0mtest                             List all partitions\n\nArguments: \n -foo                            foo flag\n                                \n",
+               OutputFlag),
+
+  cli_console:register(["test"],
+                       [cli_console_command_arg:set_default(TestArg, true)],
+                       TestFun, "List all partitions"),
+  OutputFlagDefault = catch_output(fun() -> cli_console:run("test --help") end),
+  ?assertEqual("\e[37;1mHelp\n\n\e[0mtest                             List all partitions\n\nArguments: \n -foo                            foo flag\n                                 Default value: true\n",
+               OutputFlagDefault),
+
+  cli_console:register(["test"],
+                       [cli_console_command_arg:mandatory(TestArg)],
+                       TestFun, "List all partitions"),
+  OutputFlagMandatory = catch_output(fun() -> cli_console:run("test --help") end),
+  ?assertEqual("\e[37;1mHelp\n\n\e[0mtest                             List all partitions\n\nArguments: \n -foo                            foo flag\n                                 Mandatory parameter.\n",
+               OutputFlagMandatory),
+
   cli_console:register(["test"], [Help], TestFun, "List all partitions"),
   Output2 = catch_output(fun() -> cli_console:run("test --help") end),
   ?assertEqual("ok", Output2).
+
+automatic_help_command(_Config) ->
+  TestFun = fun(_) -> [{text, "ok"}] end,
+  cli_console:register(["test"], [], TestFun, "Test fun desc"),
+  Output = catch_output(fun() -> cli_console:run("help") end),
+  ?assertEqual("\e[37;1mHelp\n\n\e[0mdelete                           Delete Table\ndescribe table                   list all fields in table\nhelp                             Print help\nlist partitions                  List all partitions\nset limit                        set limit for something\nshow commands                    show available commands\nshow tables                      show database tables\ntest                             Test fun desc\ntest help                        print help\n",
+               Output).
+
+help_for_exact_command(_Config) ->
+  TestFun = fun(_) -> [{text, "ok"}] end,
+  % no args
+  cli_console:register(["test"], [], TestFun, "Test fun desc"),
+  Output = catch_output(fun() -> cli_console:run("test -help") end),
+  ?assertEqual("\e[37;1mHelp\n\n\e[0mtest                             Test fun desc\n",
+               Output),
+  Args =
+    [ cli_console_command_arg:set_default(cli_console_command_arg:argument("all", flag, "list all"), false),
+      cli_console_command_arg:set_default(cli_console_command_arg:argument("limit", integer, "set number of items"), 10),
+      cli_console_command_arg:argument("skip_echo", flag, "skip echo desc"),
+      cli_console_command_arg:mandatory(cli_console_command_arg:argument("toggle", flag, "Toggle for testpurposes")),
+      cli_console_command_arg:set_default(cli_console_command_arg:mandatory(cli_console_command_arg:argument("allin", flag, "Mandatory and has default value it doesnotmake sence but itis possible for test purposes")), true)
+    ],
+
+  cli_console:register(["test"], Args, TestFun, "Test fun desc"),
+  Output2 = catch_output(fun() -> cli_console:run("test -help") end),
+  ?assertEqual("\e[37;1mHelp\n\n\e[0mtest                             Test fun desc\n\nArguments: \n -all                            list all\n                                 Default value: false\n -limit                          set number of items\n                                 Default value: 10\n -skip_echo                      skip echo desc\n                                \n -toggle                         Toggle for testpurposes\n                                 Mandatory parameter.\n -allin                          Mandatory and has default value it doesnotmake sence but itis possible for test purposes\n                                 Mandatory parameter. Default value: true\n",
+               Output2).
+
+help_subcommands(_Config) ->
+  TestFun = fun(_) -> [{text, "ok"}] end,
+  cli_console:register(["foo", "bar"], [], TestFun, "foo bar fun desc"),
+  cli_console:register(["foo", "test"], [], TestFun, "foo test fun desc"),
+  Output = catch_output(fun() -> cli_console:run("foo") end),
+  ?assertEqual("Command not found\n\n\e[37;1mHelp\n\n\e[0mfoo bar                          foo bar fun desc\nfoo test                         foo test fun desc\n",
+               Output).
+
+empty_command_for_full_help(_Config) ->
+  Output = catch_output(fun() -> cli_console:run("") end),
+  ?assertEqual("Command not found\n\n\e[37;1mHelp\n\n\e[0mdelete                           Delete Table\ndescribe table                   list all fields in table\nfoo bar                          foo bar fun desc\nfoo test                         foo test fun desc\nhelp                             Print help\nlist partitions                  List all partitions\nset limit                        set limit for something\nshow commands                    show available commands\nshow tables                      show database tables\ntest                             Test fun desc\ntest help                        print help\n",
+               Output).
 
 handle_errors(_Config) ->
   TestFun = fun(_) -> throw("ooups"), [{text, "ok"}] end,
   cli_console:register(["test"], [], TestFun, "List all partitions"),
   Output = catch_output(fun() -> cli_console:run("test") end),
   ?assertEqual("\e[31;1mError occured\n\e[0m\e[31;1m\"ooups\"\n\e[0m", Output).
+
+crash_in_function(_Config) ->
+  ok = meck:new(unicode, [passthrough, unstick]),
+  meck:expect(unicode, characters_to_binary,
+              fun(_) -> throw(big_error_in_conveer) end),
+  TestFun = fun(_) -> [{text, "ok"}] end,
+  Arg1 = cli_console_command_arg:argument("arg1", binary, "Arg1 desc"),
+  cli_console:register(["test"], [Arg1], TestFun, "List all partitions"),
+  Output = catch_output(fun() -> cli_console:run("test --arg1=foobar") end),
+
+  ?assertEqual("{nocatch,big_error_in_conveer}",
+               string:sub_string(Output, 2, 31)).
+
+pid_not_in_state(_Config) ->
+  erlang:whereis(cli_console_command) ! {'EXIT', self(), error},
+  ok.
+
+default_value_flag(_Config) ->
+  cli_console:register(["connections"],
+                       [
+                         cli_console_command_arg:set_default(
+                           cli_console_command_arg:argument("all", flag, "desc"),
+                           false),
+                         cli_console_command_arg:set_default(
+                           cli_console_command_arg:argument("limit", integer, "desc"),
+                           10
+                         ),
+                         cli_console_command_arg:argument("skip_echo", flag, "desc")
+                       ],
+                       fun (_) -> {text, "ok"} end,
+                       "List connections status"),
+  Output = catch_output(fun() -> cli_console:run("connections --help") end),
+  ?assertEqual("\e[37;1mHelp\n\n\e[0mconnections                      List connections status\n\nArguments: \n -all                            desc\n                                 Default value: false\n -limit                          desc\n                                 Default value: 10\n -skip_echo                      desc\n                                \n",
+               Output).
+
 
 list_partitions(Args) ->
   [cli_console_formatter:title("List of partions"),
@@ -283,8 +388,6 @@ catch_output(Fun) ->
   try
     erlang:group_leader(NewGroupLeader, self()),
     Fun()
-  catch Exception ->
-    throw(Exception)
   after
     erlang:group_leader(GroupLeader, self())
   end,

@@ -11,12 +11,8 @@
 -include("cli_console_command.hrl").
 
 %% API
--export([argument/2, argument/3, set_default/2, mandatory/1]).
+-export([argument/3, set_default/2, mandatory/1]).
 
-%% @doc create argument record
--spec argument(string(), argument_type()) -> command_argument().
-argument(Name, Type) ->
-  #argument{name = Name, type = Type}.
 
 %% @doc create argument record with description
 -spec argument(string(), argument_type(), string()) -> command_argument().

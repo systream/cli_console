@@ -6,14 +6,38 @@ Parsing and executing console commands
 ## Example
 Until i have time to write proper documentation here is an example how to use it:
 
-Define arguments
+### Defining arguments
+Available argument types: `flag | atom | string | binary | integer`
+Arguments converted to target type automatically. 
+
+Example: 
+
+Simple `flag` argument called `all`, with `List all partitions` description. 
+Descriptions are useful when printing automatically generated help.   
 ```erlang
-All = cli_console_command_arg:argument("all", flag, "List all partitions"),
-Node = cli_console_command_arg:set_default(cli_console_command_arg:argument("node", atom, "Target node name"), node()),
-Limit = cli_console_command_arg:mandatory(cli_console_command_arg:argument("limit", integer, "Max number of items to show")).
+All = cli_console_command_arg:argument("all", flag, "List all partitions").
 ```
 
-Create command handler fun
+It is possible to set a default value for an argument, if it is not provided. 
+```erlang
+Node = cli_console_command_arg:set_default(
+        cli_console_command_arg:argument("node", atom, "Target node name"), 
+        node()
+      ),
+```
+
+If an argument is required, it can be marked as a mandatory.
+```erlang
+Limit = cli_console_command_arg:mandatory(
+          cli_console_command_arg:argument("limit", integer, "Max number of items to show")
+        ).
+```
+
+#### Create command handler fun
+
+When registering a command it is needed to provide a command handler fun. 
+
+Example:
 ```erlang
 list_partitions(Args) ->
   [cli_console_formatter:title("List of partions"),
@@ -29,12 +53,16 @@ get_partitions(false) ->
   [#{"partition" => [P], "node" => atom_to_list(node())} || P <- lists:seq($a, $d)].
 ```
 
-Register command
+#### Registering command
+
+Example: 
 ```erlang
 cli_console:register(["list", "partitions"], [All, Node, Limit], fun list_partitions/1, "List partitions").
 ```
 
-Run command
+####Run command
+
+Example:
 ```erlang
 cli_console:run("list partitions --limit 123 -node=test --all").
 ```
@@ -87,3 +115,7 @@ Test
 -----
 
     $ rebar3 test
+        
+TODO
+-----  
+* Implement "Register command" callbacks, to not loose commands when process crashes.

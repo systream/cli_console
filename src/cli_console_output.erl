@@ -21,6 +21,7 @@
            {missing_arguments, [command_argument()]}.
 output({error, Error}) ->
   show_error(Error),
+  io:format("~n", []),
   ok;
 output({ok, Data}) when is_list(Data) ->
   [format(Unit) || Unit <- Data],
@@ -39,15 +40,17 @@ format({format, Module, Format}) ->
                 {missing_arguments, [command_argument()]}) -> ok.
 show_error(command_not_found) ->
   io:format("Command not found~n");
-show_error({not_convertible, {Type, Value}}) ->
-  io:format("Illegal parameter: ~p ~p~n", [Type, Value]);
+show_error({not_convertible, {Name, Type, Value}}) ->
+  io:format("Illegal parameter: ~s (~p) - ~p~n", [Name, Type, Value]);
 show_error({missing_arguments, Args}) ->
   io:format("Missing argument: ~n", []),
   [missing_argument(Arg) || Arg <- Args],
+  ok;
+show_error(Error) ->
+  io:format("~p ~n", [Error]),
   ok.
 
 -spec missing_argument(command_argument()) -> ok.
-missing_argument(#argument{name = Name, description = undefined}) ->
-  io:format(" * ~p~n", [Name]);
 missing_argument(#argument{name = Name, description = Desc}) ->
-  io:format(" * ~p: ~p~n", [Name, Desc]).
+  NameStr = string:pad(Name, 19),
+  io:format(" * ~s \t ~s~n", [NameStr, Desc]).

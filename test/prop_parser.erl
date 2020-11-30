@@ -75,7 +75,7 @@ console_data() ->
                  ]))).
 
 flag_key() ->
-    console_data().
+    frequency([{5, console_data()}, {1, "help"}]).
 
 flag_marker() ->
     oneof(["-", "--"]).

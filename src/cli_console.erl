@@ -26,7 +26,7 @@ run(ConsoleCommand) ->
 register(Command, Arguments, Fun, Description) ->
   cli_console_command:register(Command, Arguments, Fun, Description).
 
-maybe_print_help({error, _}, Command) ->
+maybe_print_help({error, command_not_found}, Command) ->
   cli_console_output:output(cli_console_command:get_help(Command));
 maybe_print_help(_, _) ->
   ok.

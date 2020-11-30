@@ -139,7 +139,7 @@ command_not_found(_Config) ->
                cli_console_command:run(["not_found_command"], [])).
 
 mandatory_arg_not_set_found(_Config) ->
-  Foo = cli_console_command_arg:argument("foo", string),
+  Foo = cli_console_command_arg:argument("foo", string, "foo desc"),
   FooRequired = cli_console_command_arg:mandatory(Foo),
 
   cli_console_command:register(["test1"], [FooRequired], ?DUMMY_FUN, ""),
@@ -148,7 +148,7 @@ mandatory_arg_not_set_found(_Config) ->
                cli_console_command:run(["test1"], [])).
 
 mandatory_arg_not_set_but_has_default(_Config) ->
-  Foo = cli_console_command_arg:argument("foo", string),
+  Foo = cli_console_command_arg:argument("foo", string, "foo desc"),
   FooWithDefault = cli_console_command_arg:set_default(Foo, "test"),
   FooRequired = cli_console_command_arg:mandatory(FooWithDefault),
 
@@ -157,7 +157,7 @@ mandatory_arg_not_set_but_has_default(_Config) ->
   ?assertEqual({ok, ok}, cli_console_command:run(["test1"], [])).
 
 get_default_if_arg_not_specified(_Config) ->
-  Foo = cli_console_command_arg:argument("foo", string),
+  Foo = cli_console_command_arg:argument("foo", string, "doo desc"),
   FooWithDefault = cli_console_command_arg:set_default(Foo, "test"),
   FooRequired = cli_console_command_arg:mandatory(FooWithDefault),
 
@@ -167,10 +167,10 @@ get_default_if_arg_not_specified(_Config) ->
                cli_console_command:run(["test1"], [])).
 
 run_with_mixed_args(_Config) ->
-  Simple = cli_console_command_arg:argument("simple", string),
+  Simple = cli_console_command_arg:argument("simple", string, "foo desc"),
   SimpleWithDefault = cli_console_command_arg:set_default(Simple, "test"),
   Mandatory = cli_console_command_arg:mandatory(
-    cli_console_command_arg:argument("mandatory", integer)
+    cli_console_command_arg:argument("mandatory", integer, "mandatort desc")
   ),
 
   cli_console_command:register(["command"],
@@ -198,7 +198,7 @@ arg_convert_happy(_Config) ->
 
 
 test_arg_convert(Type, Test, Result) ->
-  Arg = cli_console_command_arg:argument("test_arg", Type),
+  Arg = cli_console_command_arg:argument("test_arg", Type, "desc"),
   cli_console_command:register(["type_check"], [Arg], fun(A) -> A end, ""),
   ?assertEqual({ok, [{"test_arg", Result}]},
                cli_console_command:run(["type_check"], [{"test_arg", Test}])).
