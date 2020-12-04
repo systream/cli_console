@@ -33,7 +33,7 @@ output({ok, Data}) ->
 format({text, Data}) ->
   io:format(Data);
 format({format, Module, Format}) ->
-  io:format(Module:format(Format)).
+  io:format(apply(Module, format, [Format])).
 
 -spec show_error(command_not_found |
                 {not_convertible, {Type :: atom(), Value :: term()}} |
@@ -41,7 +41,7 @@ format({format, Module, Format}) ->
 show_error(command_not_found) ->
   io:format("Command not found~n");
 show_error({not_convertible, {Name, Type, Value}}) ->
-  io:format("Illegal parameter: ~s (~p) - ~p~n", [Name, Type, Value]);
+  io:format("Illegal parameter: ~ts (~p) - ~p~n", [Name, Type, Value]);
 show_error({missing_arguments, Args}) ->
   io:format("Missing argument: ~n", []),
   [missing_argument(Arg) || Arg <- Args],
@@ -53,4 +53,4 @@ show_error(Error) ->
 -spec missing_argument(command_argument()) -> ok.
 missing_argument(#argument{name = Name, description = Desc}) ->
   NameStr = string:pad(Name, 19),
-  io:format(" * ~s \t ~s~n", [NameStr, Desc]).
+  io:format(" * ~ts \t ~ts~n", [NameStr, Desc]).

@@ -49,8 +49,11 @@ get_help(Command) ->
 %%% Spawning and gen_server implementation
 %%%===================================================================
 
+-spec start_link() ->
+  {ok, pid()} | {error, {already_started, pid()}} | {error, term()}.
 start_link() ->
-  gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+  gen_server:start_link({local, ?SERVER}, ?MODULE, [],
+                        [{hibernate_after, timer:seconds(160)}]).
 
 -spec init(term()) -> {ok, state()}.
 init(_) ->
@@ -65,9 +68,10 @@ handle_call({run, Command, Args}, From, State = #state{}) ->
     [] ->
       {reply, {error, command_not_found}, State};
     [{_, ArgsDef, Fun, _Description}] ->
-      CommandPid = run_command(Command, Args, ArgsDef, From, Fun),
+      CommandPid = spawn_run_command(Command, Args, ArgsDef, From, Fun),
       RunningCommands = State#state.running_commands,
-      {noreply, State#state{running_commands = [{CommandPid, From} | RunningCommands]}}
+      {noreply,
+       State#state{running_commands = [{CommandPid, From} | RunningCommands]}}
   end;
 handle_call({get_help, Command}, _From, State = #state{}) ->
   Help = do_get_help(Command),
@@ -84,7 +88,7 @@ handle_cast(_Request, State = #state{}) ->
 -spec handle_info(Info :: term(), State :: term()) ->
   {noreply, NewState :: term()}.
 handle_info({'EXIT', Pid, normal}, #state{running_commands = Rc} = State) ->
-  {noreply, State#state{running_commands = lists:delete(Pid, Rc)}};
+  {noreply, State#state{running_commands = proplists:delete(Pid, Rc)}};
 handle_info({'EXIT', Pid, Reason}, #state{running_commands = Rc} = State) ->
   case lists:keyfind(Pid, 1, Rc) of
     false ->
@@ -92,29 +96,31 @@ handle_info({'EXIT', Pid, Reason}, #state{running_commands = Rc} = State) ->
     {_, From} ->
       gen_server:reply(From, {error, Reason})
   end,
-  {noreply, State#state{running_commands = lists:delete(Pid, Rc)}}.
+  {noreply, State#state{running_commands = proplists:delete(Pid, Rc)}}.
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-run_command(Command, Args, ArgsDef, From, Fun) ->
+spawn_run_command(Command, Args, ArgsDef, From, Fun) ->
   spawn_link(fun() ->
-    Result =
-      case convert(ArgsDef, Args) of
-        {ok, NewArgs} ->
-          case is_not_in_arg_def_but_set(ArgsDef, Args, "help") of
-            true ->
-              get_help(Command);
-            _ ->
-              MissingArguments = get_missing_arguments(ArgsDef, NewArgs),
-              evaluate_argument_check(MissingArguments, fun() -> execute_fun(Fun, NewArgs) end)
-          end;
-        Else ->
-          Else
-       end,
-      gen_server:reply(From, Result)
-    end).
+              CommandResult = run_command(Command, Args, ArgsDef, Fun),
+              gen_server:reply(From, CommandResult)
+             end).
+
+run_command(Command, Args, ArgsDef, Fun) ->
+  case convert(ArgsDef, Args) of
+    {ok, NewArgs} ->
+      case is_not_in_arg_def_but_set(ArgsDef, Args, "help") of
+        true ->
+          get_help(Command);
+        _ ->
+          MissingArguments = get_missing_arguments(ArgsDef, NewArgs),
+          evaluate_argument_check(MissingArguments,
+                                  fun() -> execute_fun(Fun, NewArgs) end)
+      end;
+    Else ->
+      Else
+   end.
 
 execute_fun(Fun, NewArgs) ->
   try
@@ -262,22 +268,22 @@ format_command({Commands, Desc, Args}) ->
    [format_arg(Arg) || Arg <- Args]];
 format_command({Commands, Desc}) ->
   CommandStr = string:pad(string:join(Commands, " "), 32),
-  cli_console_formatter:text("~s ~s", [CommandStr, Desc]).
+  cli_console_formatter:text("~ts ~ts", [CommandStr, Desc]).
 
 format_arg(#argument{name = Name, optional = Optional,
                       default = Default, description = Desc}) ->
 
   CommandStr = string:pad(Name, 30),
   ArgData = get_default_string(Default, get_optional_string(Optional, "")),
-  cli_console_formatter:text(" -~s ~s~n~s~s",
+  cli_console_formatter:text(" -~ts ~ts~n~ts~ts",
                              [CommandStr, Desc, lists:duplicate(32, " "), ArgData]).
 
 get_default_string(undefined, Acc) ->
   Acc;
 get_default_string(Default, Acc) when is_integer(Default) ->
-  Acc ++ " Default value: " ++ io_lib:format("~s", [integer_to_list(Default)]);
+  Acc ++ " Default value: " ++ io_lib:format("~ts", [integer_to_list(Default)]);
 get_default_string(Default, Acc) ->
-  Acc ++ " Default value: " ++ io_lib:format("~s", [Default]).
+  Acc ++ " Default value: " ++ io_lib:format("~ts", [Default]).
 
 get_optional_string(true, Acc) ->
   Acc;

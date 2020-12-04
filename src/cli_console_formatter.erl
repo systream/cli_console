@@ -15,13 +15,16 @@
 -behavior(cli_console_output).
 
 %% API
--export([text/1, text/2, title/1,
+-export([text/1, text/2,
+         title/1,
          separator/0,
          format/1,
          alert/1,
          list/1,
          table/1,
-         success/1, error/1, warning/1]).
+         success/1,
+         error/1,
+         warning/1]).
 
 -spec text(string()) -> {format, module(), {text, string()}}.
 text(String) ->

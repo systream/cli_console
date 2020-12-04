@@ -160,12 +160,20 @@ simple_command(_Config) ->
 
   ?assertEqual("Command not found\n\n\e[37;1mHelp\n\n\e[0mhelp                             Print help\nshow commands                    show available commands\nshow tables                      show database tables\n",
                catch_output(fun() -> cli_console:run("unknown command") end)),
+  ?assertEqual("Command not found\n\n\e[37;1mHelp\n\n\e[0mhelp                             Print help\nshow commands                    show available commands\nshow tables                      show database tables\n",
+               catch_output(fun() -> cli_console:run(["unknown", "command"]) end)),
   ?assertEqual("Commands\n * show tables: list tales\n * help: print help\n",
                catch_output(fun() -> cli_console:run("show commands") end)),
+  ?assertEqual("Commands\n * show tables: list tales\n * help: print help\n",
+               catch_output(fun() -> cli_console:run(["show", "commands"]) end)),
   ?assertEqual("\e[37;1mTables\n\n\e[0m * users\n * permissions\n * tweats\n",
                catch_output(fun() -> cli_console:run("show tables") end)),
+  ?assertEqual("\e[37;1mTables\n\n\e[0m * users\n * permissions\n * tweats\n",
+               catch_output(fun() -> cli_console:run(["show", "tables"]) end)),
   ?assertEqual("\e[37;1mTables\n\n\e[0mListing all tables\n---------------------------------------------------------------\n * users\n * permissions\n * tweats\n",
-               catch_output(fun() -> cli_console:run("show tables --all") end)).
+               catch_output(fun() -> cli_console:run("show tables --all") end)),
+  ?assertEqual("\e[37;1mTables\n\n\e[0mListing all tables\n---------------------------------------------------------------\n * users\n * permissions\n * tweats\n",
+               catch_output(fun() -> cli_console:run(["show", "tables", "--all"]) end)).
 
 
 table(_Config) ->

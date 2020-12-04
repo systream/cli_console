@@ -1,10 +1,23 @@
 Command Line tool
 =====
 
-Parsing and executing console commands
+Parsing and executing console commands 
 
 ## Example
 Until i have time to write proper documentation here is an example how to use it:
+
+### Setup release
+Add to your project's relx overlay config:
+
+```erlang
+{relx, [
+  ...
+  {overlay, [{template, "_build/default/lib/cli_console/rel/admin.sh", "bin/admin"}
+            ]}
+]}.
+```
+
+In the release you can use it ex: `./bin/admin help`
 
 ### Defining arguments
 Available argument types: `flag | atom | string | binary | integer`

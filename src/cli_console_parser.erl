@@ -72,5 +72,3 @@ equal_sign_parse_evaluate([Key]) ->
   {Key, true};
 equal_sign_parse_evaluate([NewKey, Data]) ->
   {NewKey, Data}.
-
-
