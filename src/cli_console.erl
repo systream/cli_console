@@ -15,8 +15,6 @@
 
 %% @doc Execute commands
 -spec run(string() | list(string())) -> ok.
-run([Item | _] = Commands) when is_list(Item) ->
-  run(string:join(Commands, " "));
 run(ConsoleCommand) ->
   {ok, Command, Arguments} = cli_console_parser:parse(ConsoleCommand),
   Result = cli_console_command:run(Command, Arguments),

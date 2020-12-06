@@ -13,8 +13,11 @@
 %% API
 -export([parse/1]).
 
--spec parse(string() | binary()) ->
+-spec parse(string() | binary() | list(string() | binary())) ->
   {ok, Command :: list(string()), Arguments :: [args()] | proplists:proplist()}.
+parse([Item | _] = Tokens) when is_list(Item) ->
+  {Command, Args} = lists:splitwith(fun is_not_arg/1, Tokens),
+  {ok, Command, parse_args(Args)};
 parse(Data) when is_list(Data) ->
   Tokens = string:lexemes(Data, " " ++ [$\r, $\n, $\\]),
   {Command, Args} = lists:splitwith(fun is_not_arg/1, Tokens),
