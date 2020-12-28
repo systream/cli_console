@@ -7,15 +7,17 @@
 %%%%%%%%%%%%%%%%%%
 prop_test() ->
   application:ensure_all_started(cli_console),
-    ?FORALL({ArgsDef, Args, Description}, {arguments_defs(), arguemnts(), string()},
+    ?FORALL({Command, ArgsDef, Args, Description},
+            {test_command(), arguments_defs(), arguemnts(), string()},
             begin
-              Command = ["cmd", "run"],
+              %Command = ["cmd", "run"],
               case cli_console_command:register(Command, ArgsDef, fun(A) -> A
                                                                   end,
                                                 Description) of
                 ok ->
+
                   % test against crash, or unhandled stuff
-                  case cli_console_command:run(Command, Args) of
+                  case cli_console_command:run(normalize_command(Command), Args) of
                     {ok, ArgsResult} ->
                       assert_ok(ArgsDef, ArgsResult, Args);
                     {error, Error} ->
@@ -60,6 +62,11 @@ assert_ok(_ArgsDef, [{format, _, _} | _], Args) ->
       true
   end.
 
+normalize_command([_, _] = Command) ->
+  Command;
+normalize_command([A, B, _C])  ->
+  [A, B, "1"].
+
 %%%%%%%%%%%%%%%%%%
 %%% Generators %%%
 %%%%%%%%%%%%%%%%%%
@@ -88,6 +95,10 @@ arguments_def() ->
             Arg1 = maybe_set_mandatory(IsMandatory, Arg),
             maybe_set_default(Default, Arg1)
         end).
+
+test_command() ->
+  frequency([{20, ["cmd", "run"]},
+             {1, ["cmd", "run", arguments_def()]}]).
 
 maybe_set_mandatory(true, Arg) ->
   cli_console_command_arg:mandatory(Arg);

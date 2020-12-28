@@ -107,6 +107,9 @@ groups() ->
 all() ->
   [ register_no_argument,
     register_the_twice,
+    register_wildcard,
+    register_multiple_wildcard,
+    register_wildcard_same_arg,
     command_not_found,
     mandatory_arg_not_set_found,
     mandatory_arg_not_set_but_has_default,
@@ -133,6 +136,34 @@ register_the_twice(_Config) ->
   ok = cli_console_command:register(["foo"], [], ?DUMMY_FUN, ""),
   ok = cli_console_command:register(["foo"], [], ?DUMMY_FUN(ok2), ""),
   ?assertEqual({ok, ok2}, cli_console_command:run(["foo"], [])).
+
+register_wildcard(_Config) ->
+  Fun = fun(Args) -> Args end,
+  WildcardArgument = cli_console_command_arg:argument("wildcard", string,
+                                                      "Desc of wildcard"),
+  ok = cli_console_command:register(["wild", WildcardArgument], [], Fun,
+                                    "Wild help"),
+  ?assertEqual({ok, [{"wildcard", "things"}]},
+               cli_console_command:run(["wild", "things"], [])).
+
+register_multiple_wildcard(_Config) ->
+  Fun = fun(Args) -> Args end,
+  WildcardArgument = cli_console_command_arg:argument("wildcard", string,
+                                                      "Desc of wildcard"),
+  WildcardArgument2 = cli_console_command_arg:argument("wildcard2", string,
+                                                      "Desc of wildcard2"),
+  ok = cli_console_command:register(["wild", WildcardArgument, WildcardArgument2],
+                                    [], Fun, "Wild help"),
+  ?assertEqual({ok, [{"wildcard2", "wild"}, {"wildcard", "things"}]},
+               cli_console_command:run(["wild", "things", "wild"], [])).
+
+register_wildcard_same_arg(_Config) ->
+  Fun = fun(Args) -> {ok, Args} end,
+  WildcardArgument = cli_console_command_arg:argument("wildcard", string,
+                                                      "Desc of wildcard"),
+  Result = cli_console_command:register(["wild", WildcardArgument],
+                                    [WildcardArgument], Fun, "Wild help"),
+  ?assertEqual({error, {multiple_argument_definitions, "wildcard"}}, Result).
 
 command_not_found(_Config) ->
   ?assertEqual({error, command_not_found},

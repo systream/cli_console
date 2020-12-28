@@ -20,6 +20,6 @@
 
 -type command_fun() :: fun((proplists:proplist()) -> [output_format()] | output_format() ).
 
--type command() :: string().
+-type command() :: string() | command_argument().
 
 -export_type([command_argument/0]).

@@ -73,11 +73,24 @@ Example:
 cli_console:register(["list", "partitions"], [All, Node, Limit], fun list_partitions/1, "List partitions").
 ```
 
+Or 
+
+Example: 
+```erlang
+cli_console:register(["list", "partitions", Node], [All, Limit], funlist_partitions/1, "List partitions").
+```
+
 ####Run command
 
 Example:
 ```erlang
-cli_console:run("list partitions --limit 123 -node=test --all").
+cli_console:run("list partitions --limit 123 -node=testnode --all").
+```
+
+or 
+
+```erlang
+cli_console:run("list partitions testnode --limit 123 --all").
 ```
 
 Output: 

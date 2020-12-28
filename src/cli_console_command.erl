@@ -66,12 +66,14 @@ init(_) ->
 handle_call({run, Command, Args}, From, State = #state{}) ->
   case ets:lookup(?ETS_TABLE_NAME, Command) of
     [] ->
-      {reply, {error, command_not_found}, State};
-    [{_, ArgsDef, Fun, _Description}] ->
-      CommandPid = spawn_run_command(Command, Args, ArgsDef, From, Fun),
-      RunningCommands = State#state.running_commands,
-      {noreply,
-       State#state{running_commands = [{CommandPid, From} | RunningCommands]}}
+      case get_wildcard_command(Command) of
+        [] ->
+          {reply, {error, command_not_found}, State};
+        Result ->
+          evaluate_command_lookup_result(Result, Command, Args, From, State)
+      end;
+    Else ->
+      evaluate_command_lookup_result(Else, Command, Args, From, State)
   end;
 handle_call({get_help, Command}, _From, State = #state{}) ->
   Help = do_get_help(Command),
@@ -106,6 +108,13 @@ spawn_run_command(Command, Args, ArgsDef, From, Fun) ->
               CommandResult = run_command(Command, Args, ArgsDef, Fun),
               gen_server:reply(From, CommandResult)
              end).
+
+evaluate_command_lookup_result([{CommandSpec, ArgsDef, Fun, _Description}],
+                               Command, Args, From, State) ->
+  NewArgs = extract_command_args(CommandSpec, Command, Args),
+  CommandPid = spawn_run_command(Command, NewArgs, ArgsDef, From, Fun),
+  RunningCommands = State#state.running_commands,
+  {noreply, State#state{running_commands = [{CommandPid, From} | RunningCommands]}}.
 
 run_command(Command, Args, ArgsDef, Fun) ->
   case convert(ArgsDef, Args) of
@@ -223,7 +232,7 @@ is_numeric(Value) ->
 do_get_help([]) ->
   ets:foldr(fun({Command, _, _, Desc}, Acc) ->
               [{Command, Desc} | Acc]
-            end, [], cli_commands);
+            end, [], ?ETS_TABLE_NAME);
 do_get_help(InCommands) ->
   case ets:lookup(?ETS_TABLE_NAME, InCommands) of
     [] ->
@@ -233,9 +242,9 @@ do_get_help(InCommands) ->
   end.
 
 do_help_lookup(InCommands) ->
-  case ets:select(cli_commands, get_select_matchspec(InCommands, false)) of
+  case ets:select(?ETS_TABLE_NAME, get_select_matchspec(InCommands, false)) of
     [] ->
-      ets:select(cli_commands, get_select_matchspec(InCommands, true));
+      ets:select(?ETS_TABLE_NAME, get_select_matchspec(InCommands, true));
     Else ->
       Else
   end.
@@ -267,8 +276,14 @@ format_command({Commands, Desc, Args}) ->
    cli_console_formatter:text("~nArguments: ") |
    [format_arg(Arg) || Arg <- Args]];
 format_command({Commands, Desc}) ->
-  CommandStr = string:pad(string:join(Commands, " "), 32),
+  NewCommands = lists:map(fun format_command_string/1, Commands),
+  CommandStr = string:pad(string:join(NewCommands, " "), 32),
   cli_console_formatter:text("~ts ~ts", [CommandStr, Desc]).
+
+format_command_string(#argument{name = Name}) ->
+  "<" ++ Name ++">";
+format_command_string(Command) ->
+  Command.
 
 format_arg(#argument{name = Name, optional = Optional,
                       default = Default, description = Desc}) ->
@@ -303,13 +318,30 @@ is_argument_defined(Arg, ArgsDef) ->
   end.
 
 register_command(Command, ArgsDef, Fun, Description) ->
-  case check_multiple_argdefs(ArgsDef) of
+  CommandArguments = get_command_arguments(Command),
+  case check_multiple_argdefs(ArgsDef ++ CommandArguments) of
     ok ->
+      ets:match_delete(?ETS_TABLE_NAME, {generate_match_head(Command),
+                                         generate_filter(Command), []}),
       true = ets:insert(?ETS_TABLE_NAME, {Command, ArgsDef, Fun, Description}),
       ok;
     Else ->
       Else
   end.
+
+get_command_arguments(Command) ->
+  lists:filter(fun(#argument{}) -> true;
+                  (_)           -> false
+               end, Command).
+
+get_command_arguments_with_index(Command) ->
+  {_, Result} =
+    lists:foldl(fun(#argument{} = Item, {ItemSeq, Acc}) ->
+                      {ItemSeq+1, [{ItemSeq, Item} | Acc]};
+                   (_, {ItemSeq, Acc}) ->
+                     {ItemSeq+1, Acc}
+                end, {1, []}, Command),
+  Result.
 
 check_multiple_argdefs(Argdefs) ->
   check_multiple_argdefs(Argdefs, []).
@@ -334,3 +366,39 @@ format_help(HelpCommand, Acc) ->
     Item ->
       [Item | Acc]
   end.
+
+get_wildcard_command(Command) ->
+  case ets:select(?ETS_TABLE_NAME, [{generate_match_head(Command),
+                                     generate_filter(Command), ['$_']}]) of
+    [] ->
+      [];
+    [{Commands, ArgsDef, Fun, Description}] ->
+      CommandArguments = get_command_arguments(Commands),
+      [{Commands, ArgsDef ++ CommandArguments, Fun, Description}]
+  end.
+
+generate_match_head(Command) ->
+  CommandHead = [item_num(ItemNum) || ItemNum <- lists:seq(1, length(Command))],
+  {CommandHead, '_', '_', '_'}.
+
+generate_filter(Command) ->
+  generate_filter(Command, 1, []).
+
+generate_filter([], _ItemCount, Where) ->
+  lists:reverse(Where);
+generate_filter([Command | Rest], ItemCount, Where) ->
+  Item = item_num(ItemCount),
+  Filter = {'orelse',
+    {'==', Command, Item},
+    {'==', argument, {element, 1, Item}}
+  },
+  generate_filter(Rest, ItemCount+1, [Filter | Where]).
+
+item_num(ItemNum) ->
+  list_to_atom("$" ++ integer_to_list(ItemNum)).
+
+extract_command_args(CommandSpec, Command, Args) ->
+  CommandArgWithIndex = get_command_arguments_with_index(CommandSpec),
+  lists:foldl(fun({Index, #argument{name = Name}}, Acc) ->
+                   [{Name, lists:nth(Index, Command)} | Acc]
+              end, Args, CommandArgWithIndex).

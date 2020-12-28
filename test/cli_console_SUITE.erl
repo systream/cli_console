@@ -119,7 +119,8 @@ all() ->
     handle_errors,
     crash_in_function,
     default_value_flag,
-    pid_not_in_state
+    pid_not_in_state,
+    wild_card_argument_help
   ].
 
 %%--------------------------------------------------------------------
@@ -375,6 +376,13 @@ default_value_flag(_Config) ->
   ?assertEqual("\e[37;1mHelp\n\n\e[0mconnections                      List connections status\n\nArguments: \n -all                            desc\n                                 Default value: false\n -limit                          desc\n                                 Default value: 10\n -skip_echo                      desc\n                                \n",
                Output).
 
+wild_card_argument_help(_Config) ->
+  Fun = fun(_Args) -> [{text, "ok"}] end,
+  Arg1 = cli_console_command_arg:argument("table", string, "Table name"),
+  Arg2 = cli_console_command_arg:argument("type", string, "Table type"),
+  ok = cli_console_command:register(["wild", Arg1, Arg2], [], Fun, "Wild help"),
+  ?assertEqual("Command not found\n\n\e[37;1mHelp\n\n\e[0mwild <table> <type>              Wild help\n",
+               catch_output(fun() -> cli_console:run(["wild"]) end)).
 
 list_partitions(Args) ->
   [cli_console_formatter:title("List of partions"),
