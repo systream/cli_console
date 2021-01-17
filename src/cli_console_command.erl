@@ -12,11 +12,12 @@
 -include("cli_console_command.hrl").
 -include_lib("stdlib/include/ms_transform.hrl").
 
--export([start_link/0, register/4, run/2, get_help/1, handle_info/2]).
--export([init/1, handle_call/3, handle_cast/2]).
+-export([start_link/0, register/4, register/2, run/2, get_help/1]).
+-export([init/1, handle_call/3, handle_cast/2, handle_info/2]).
 
 -define(SERVER, ?MODULE).
 -define(ETS_TABLE_NAME, cli_commands).
+-define(PERSISTENT_TERM_KEY, {?MODULE, register_command_callbacks}).
 
 -record(state, {
   running_commands = [] :: [{CommandPid :: pid(), From :: {pid(), term()}}]
@@ -28,9 +29,15 @@
 %%% API
 %%%===================================================================
 
--spec register([command()], [command_argument()], command_fun(), string()) -> ok.
+-spec register([command()], [command_argument()], command_fun(), string()) ->
+  ok | {error, {multiple_argument_definitions, Name :: string()}}.
 register(Command, Arguments, Fun, Description) ->
   gen_server:call(?SERVER, {register, Command, Arguments, Fun, Description}).
+
+-spec register(module(), atom()) ->
+  ok | {error, {multiple_argument_definitions, Name :: string()}}.
+register(Module, Function) ->
+  gen_server:call(?SERVER, {register, Module, Function}).
 
 -spec run([string()], proplists:proplist()) ->
   {ok, term()} |
@@ -58,7 +65,8 @@ start_link() ->
 -spec init(term()) -> {ok, state()}.
 init(_) ->
   process_flag(trap_exit, true),
-  ets:new(cli_commands, [set, protected, named_table]),
+  ets:new(?ETS_TABLE_NAME, [set, protected, named_table]),
+  init_commands_from_registered_callback(),
   {ok, #state{}}.
 
 -spec handle_call(term(), {pid(), Tag :: term()}, state()) ->
@@ -81,7 +89,15 @@ handle_call({get_help, Command}, _From, State = #state{}) ->
   {reply, {ok, [cli_console_formatter:title("Help~n") | Output]}, State};
 handle_call({register, Command, ArgsDef, Fun, Description}, _From,
             State = #state{}) ->
-  {reply, register_command(Command, ArgsDef, Fun, Description), State}.
+  {reply, register_command(Command, ArgsDef, Fun, Description), State};
+handle_call({register, Module, Function}, _From, State = #state{}) ->
+  case catch register_commands_via_callback([{Module, Function}]) of
+    ok ->
+      store_command_register_callback(Module, Function),
+      {reply, ok, State};
+    Else ->
+      {reply, {error, Else}, State}
+  end.
 
 -spec handle_cast(term(), state()) -> {noreply, state()}.
 handle_cast(_Request, State = #state{}) ->
@@ -123,9 +139,7 @@ run_command(Command, Args, ArgsDef, Fun) ->
         true ->
           get_help(Command);
         _ ->
-          MissingArguments = get_missing_arguments(ArgsDef, NewArgs),
-          evaluate_argument_check(MissingArguments,
-                                  fun() -> execute_fun(Fun, NewArgs) end)
+          evaluate_argument_check(ArgsDef, NewArgs, Fun)
       end;
     Else ->
       Else
@@ -140,6 +154,10 @@ execute_fun(Fun, NewArgs) ->
       cli_console_formatter:error(io_lib:format("~p", [Error]))
     ]}
   end.
+
+evaluate_argument_check(ArgsDef, NewArgs, Fun) ->
+  MissingArguments = get_missing_arguments(ArgsDef, NewArgs),
+  evaluate_argument_check(MissingArguments, fun() -> execute_fun(Fun, NewArgs) end).
 
 evaluate_argument_check([], Fun) ->
   Fun();
@@ -281,7 +299,7 @@ format_command({Commands, Desc}) ->
   cli_console_formatter:text("~ts ~ts", [CommandStr, Desc]).
 
 format_command_string(#argument{name = Name}) ->
-  "<" ++ Name ++">";
+  "<" ++ Name ++ ">";
 format_command_string(Command) ->
   Command.
 
@@ -321,8 +339,10 @@ register_command(Command, ArgsDef, Fun, Description) ->
   CommandArguments = get_command_arguments(Command),
   case check_multiple_argdefs(ArgsDef ++ CommandArguments) of
     ok ->
-      ets:match_delete(?ETS_TABLE_NAME, {generate_match_head(Command),
-                                         generate_filter(Command), []}),
+      % need to clean up previous commands to make does not register multiple
+      % wildcard argument command
+      [ets:delete(?ETS_TABLE_NAME, PrevCommand) ||
+        {PrevCommand, _, _, _} <- get_wildcard_command(Command)],
       true = ets:insert(?ETS_TABLE_NAME, {Command, ArgsDef, Fun, Description}),
       ok;
     Else ->
@@ -388,11 +408,16 @@ generate_filter([], _ItemCount, Where) ->
   lists:reverse(Where);
 generate_filter([Command | Rest], ItemCount, Where) ->
   Item = item_num(ItemCount),
-  Filter = {'orelse',
-    {'==', Command, Item},
-    {'==', argument, {element, 1, Item}}
-  },
+  Filter = generate_filter(Command, Item),
   generate_filter(Rest, ItemCount+1, [Filter | Where]).
+
+generate_filter(#argument{}, Item) ->
+  {'==', argument, {element, 1, Item}};
+generate_filter(Command, Item) ->
+  {'orelse',
+   {'==', Command, Item},
+   {'==', argument, {element, 1, Item}}
+  }.
 
 item_num(ItemNum) ->
   list_to_atom("$" ++ integer_to_list(ItemNum)).
@@ -402,3 +427,34 @@ extract_command_args(CommandSpec, Command, Args) ->
   lists:foldl(fun({Index, #argument{name = Name}}, Acc) ->
                    [{Name, lists:nth(Index, Command)} | Acc]
               end, Args, CommandArgWithIndex).
+
+store_command_register_callback(Module, Function) ->
+  Callbacks = get_command_register_callbacks(),
+  Data = {Module, Function},
+  NewCallbacks =
+    case lists:member(Data, Callbacks) of
+      true ->
+        Callbacks;
+      false ->
+        [Data | Callbacks]
+    end,
+  persistent_term:put(?PERSISTENT_TERM_KEY, NewCallbacks).
+
+get_command_register_callbacks() ->
+  persistent_term:get(?PERSISTENT_TERM_KEY, []).
+
+init_commands_from_registered_callback() ->
+  register_commands_via_callback(get_command_register_callbacks()).
+
+register_commands_via_callback([]) ->
+  ok;
+register_commands_via_callback([{Module, Function} | Rest]) ->
+  Result = apply(Module, Function, []),
+  register_command_callback_result(Result),
+  register_commands_via_callback(Rest).
+
+register_command_callback_result([]) ->
+  ok;
+register_command_callback_result([{Command, ArgDef, Fun, Description} | Rest]) ->
+  ok = register_command(Command, ArgDef, Fun, Description),
+  register_command_callback_result(Rest).

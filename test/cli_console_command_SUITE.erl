@@ -110,6 +110,7 @@ all() ->
     register_wildcard,
     register_multiple_wildcard,
     register_wildcard_same_arg,
+    register_wildcard_different_args,
     command_not_found,
     mandatory_arg_not_set_found,
     mandatory_arg_not_set_but_has_default,
@@ -164,6 +165,21 @@ register_wildcard_same_arg(_Config) ->
   Result = cli_console_command:register(["wild", WildcardArgument],
                                     [WildcardArgument], Fun, "Wild help"),
   ?assertEqual({error, {multiple_argument_definitions, "wildcard"}}, Result).
+
+register_wildcard_different_args(_Config) ->
+  WildcardArgument = cli_console_command_arg:argument("wildcard", string,
+                                                      "Desc of wildcard"),
+  WildcardArgumentDefault =
+    cli_console_command_arg:set_default(WildcardArgument, "test"),
+  ok = cli_console_command:register(["wild", WildcardArgument], [],
+                                    fun(_Args) -> {text, "1"} end,
+                                    "Wild help"),
+
+  ok = cli_console_command:register(["wild", WildcardArgumentDefault], [],
+                                    fun(_Args) -> {text, "2"} end,
+                                    "Wild help"),
+  ?assertEqual({ok, {text, "2"}},
+               cli_console_command:run(["wild", "things"], [])).
 
 command_not_found(_Config) ->
   ?assertEqual({error, command_not_found},

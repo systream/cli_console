@@ -25,8 +25,8 @@ start_link() ->
         [ChildSpec :: supervisor:child_spec()]}}.
 init([]) ->
     SupFlags = #{strategy => one_for_all,
-                 intensity => 1,
-                 period => 10},
+                 intensity => 3,
+                 period => 100},
     ChildSpecs = [
                   #{id => cli_command_server,
                     start => {cli_console_command, start_link, []},

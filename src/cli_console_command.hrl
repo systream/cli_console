@@ -22,4 +22,4 @@
 
 -type command() :: string() | command_argument().
 
--export_type([command_argument/0]).
+-export_type([command_argument/0, command/0]).

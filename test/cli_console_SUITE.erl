@@ -120,7 +120,11 @@ all() ->
     crash_in_function,
     default_value_flag,
     pid_not_in_state,
-    wild_card_argument_help
+    wild_card_argument_help,
+    register_callback_ok,
+    register_callback_empty,
+    register_callback_bad_return,
+    register_callback_restart
   ].
 
 %%--------------------------------------------------------------------
@@ -383,6 +387,44 @@ wild_card_argument_help(_Config) ->
   ok = cli_console_command:register(["wild", Arg1, Arg2], [], Fun, "Wild help"),
   ?assertEqual("Command not found\n\n\e[37;1mHelp\n\n\e[0mwild <table> <type>              Wild help\n",
                catch_output(fun() -> cli_console:run(["wild"]) end)).
+
+register_callback_ok(_Config) ->
+  Fun = fun(_Args) -> [{text, "ok"}] end,
+  Arg1 = cli_console_command_arg:argument("arg1", string, "Arg1 desc"),
+
+  ok = meck:new(cli_test_callback, [non_strict, passthrough]),
+  meck:expect(cli_test_callback, register_cli,
+              fun() -> [{["test", "cb"], [Arg1], Fun, "Test cb help"}] end),
+
+  ?assertEqual(ok, cli_console:register(cli_test_callback, register_cli)),
+  ?assertEqual("ok",
+               catch_output(fun() -> cli_console:run("test cb --arg1=ok") end)).
+
+register_callback_empty(_Config) ->
+  ok = meck:new(cli_test_callback, [non_strict, passthrough]),
+  meck:expect(cli_test_callback, register_cli, fun() -> [] end),
+
+  ?assertEqual(ok, cli_console:register(cli_test_callback, register_cli)).
+
+register_callback_bad_return(_Config) ->
+  ok = meck:new(cli_test_callback, [non_strict, passthrough]),
+  meck:expect(cli_test_callback, register_cli, fun() -> foo end),
+
+  ?assertMatch({error, _}, cli_console:register(cli_test_callback, register_cli)).
+
+register_callback_restart(Config) ->
+  register_callback_ok(Config),
+
+  % restart command sever
+  [exit(Pid, kill) ||
+    {Id, Pid, worker, _} <- supervisor:which_children(cli_console_sup),
+    Id =:= cli_command_server],
+
+  % wait a litle to supervisor restart the died process
+  ct:sleep(200),
+  ?assertEqual("ok",
+               catch_output(fun() -> cli_console:run("test cb --arg1=ok") end)).
+
 
 list_partitions(Args) ->
   [cli_console_formatter:title("List of partions"),

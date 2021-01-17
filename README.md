@@ -75,12 +75,46 @@ cli_console:register(["list", "partitions"], [All, Node, Limit], fun list_partit
 
 Or 
 
-Example: 
 ```erlang
 cli_console:register(["list", "partitions", Node], [All, Limit], funlist_partitions/1, "List partitions").
 ```
 
-####Run command
+This ad-hoc register command method does not survive if the cli_console service
+has restarted due to crash or anything else. Use register command callbacks
+instead.
+ 
+#### Register command callbacks
+ 
+There is `cli_console:register/2` function where the module and function parameters
+must be given.
+
+First there mush define a function which contains the desired commands.
+It should return a list with tuples.
+Tuple should look like this (same as `cli_console:register/4` arguments):
+`{Commands :: [command()], Arguments::  [command_argument()], command_fun(), Description ::string()}` 
+ 
+Example module for callback:
+```erlang
+-module(test_module).
+
+%% API
+-export([register_cli/0]).
+
+-spec register_cli() -> [].
+register_cli() ->
+  [  
+    {["clustre", "status"], [], fun(_) -> {text, "status: ok"} end, "Listpartitions" }
+  ].  
+````
+
+Registering callback:
+```erlang  
+ok = cli_console:register(test_module, register_cli).
+```
+
+Cluster status command will survive if cli_console process crashes or restarted. 
+
+#### Run command
 
 Example:
 ```erlang
